@@ -69,14 +69,14 @@ static void chacha_keysetup(struct chacha_ctx *x, const uint8_t *k)
 	x->input[15] = iv[4] | iv[5] << 8 | iv[6] << 16 | iv[7] << 24;
 }
 
-static void chacha_encrypt_bytes(struct chacha_ctx *ctx, const uint8_t *m, uint8_t *c, uint32_t bytes)
+static void chacha_keystream(struct chacha_ctx *ctx, uint8_t *c, size_t bytes)
 {
 	uint8_t output[64];
 	uint32_t x[16];
 	int i;
 
 	if(!bytes)return;
-	for(; bytes > 0; c += 64, m += 64, bytes = bytes >= 64 ? bytes - 64 : 0) {
+	for(; bytes > 0; c += 64, bytes = bytes >= 64 ? bytes - 64 : 0) {
 		for(i = 0; i < 16; i++) x[i] = ctx->input[i];
 		for(i = 8; i > 0; i -= 2) {
 			QUARTERROUND(0, 4, 8, 12);
@@ -99,13 +99,11 @@ static void chacha_encrypt_bytes(struct chacha_ctx *ctx, const uint8_t *m, uint8
 		if(!ctx->input[12]) {
 			ctx->input[13]++;
 		}
-		for(i = 0; i < bytes && i < 64; i++) c[i] = m[i] ^ output[i];
+		for(i = 0; i < bytes && i < 64; i++) c[i] = output[i];
 	}
 }
 
 static struct chacha_ctx chacha;
-static uint8_t keystream[RSBUFSZ];
-static size_t have; 
 
 static void init(void)
 {
@@ -114,35 +112,17 @@ static void init(void)
 	if(getentropy(rnd, sizeof rnd) == -1)
 		abort();
 	chacha_keysetup(&chacha, rnd);
-	have = 0;
-	memset(keystream, 0, sizeof(keystream));
 }
 
-void posix_random_buffer(void *buf_void, size_t n)
+void posix_random_buffer(void *buf, size_t n)
 {
 	static int inited = 0;
 	if(!inited) {
 		init();
 		inited = 1;
 	}
-	unsigned char *buf = buf_void;
-	size_t m;
 
-	while(n > 0) {
-		if(have > 0) {
-			m = n < have ? n : have;
-			memcpy(buf, keystream + sizeof(keystream) - have, m);
-			memset(keystream + sizeof(keystream) - have, 0, m);
-			buf += m;
-			n -= m;
-			have -= m;
-		}
-		if(have == 0) {
-			memset(keystream, 0, sizeof(keystream));
-			chacha_encrypt_bytes(&chacha, keystream, keystream, sizeof(keystream));
-			have = sizeof(keystream);
-		}
-	}
+	chacha_keystream(&chacha, buf, n);
 }
 
 uint32_t posix_random(void)
