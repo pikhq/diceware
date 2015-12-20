@@ -66,7 +66,10 @@ static struct rsx {
 
 static void rs_rekey(void)
 {
+	memset(rsx.rs_buf, 0, sizeof(rsx.rs_buf));
 	chacha_encrypt_bytes(&rsx.rs_chacha, rsx.rs_buf, rsx.rs_buf, sizeof(rsx.rs_buf));
+	chacha_keysetup(&rsx.rs_chacha, rsx.rs_buf, KEYSZ * 8, 0);
+	chacha_ivsetup(&rsx.rs_chacha, rsx.rs_buf + KEYSZ);
 	memset(rsx.rs_buf, 0, KEYSZ + IVSZ);
 	rsx.rs_have = sizeof(rsx.rs_buf) - KEYSZ - IVSZ;
 }
