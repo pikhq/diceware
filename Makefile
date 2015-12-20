@@ -8,7 +8,6 @@ override CC += -std=c99
 endif
 
 override CPPFLAGS += -D_GNU_SOURCE -D_ALL_SOURCE -D_XOPEN_SOURCE=700
-override LDLIBS += -lpthread
 export CPPFLAGS CC LDLIBS LDFLAGS LOADLIBES CFLAGS
 
 diceware: $(OBJS)

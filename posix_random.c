@@ -1,3 +1,23 @@
+/* Implementation of arc4random functions initially from OpenBSD.
+ *
+ * Copyright (c) 1996, David Mazieres <dm@uun.org>
+ * Copyright (c) 2008, Damien Miller <djm@openbsd.org>
+ * Copyright (c) 2013, Markus Friedl <markus@openbsd.org>
+ * Copyright (c) 2014, Theo de Raadt <deraadt@openbsd.org>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
 #include "features.h"
 #ifndef HAVE_POSIX_RANDOM
 #include <stdint.h>
@@ -22,7 +42,11 @@ uint32_t posix_random_uniform(uint32_t up)
 #else
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
+
+/* Be advised: this cutdown implementation (copied from OpenBSD's) is neither
+ * thread-safe nor does it handle regeneration of random numbers on fork. This
+ * is not a detriment in this application but it might be in yours! Be careful.
+ */
 
 #define KEYSTREAM_ONLY
 #include "chacha_private.h"
@@ -34,31 +58,17 @@ int getentropy(void*, size_t);
 #define BLOCKSZ 64
 #define RSBUFSZ (16*BLOCKSZ)
 
-static struct rs {
-	size_t rs_have;
-} rs;
-
 static struct rsx {
 	chacha_ctx rs_chacha;
 	unsigned char rs_buf[RSBUFSZ];
+	size_t rs_have;
 } rsx;
 
-static void rs_rekey(unsigned char *dat, size_t datlen)
+static void rs_rekey(void)
 {
 	chacha_encrypt_bytes(&rsx.rs_chacha, rsx.rs_buf, rsx.rs_buf, sizeof(rsx.rs_buf));
 	memset(rsx.rs_buf, 0, KEYSZ + IVSZ);
-	rs.rs_have = sizeof(rsx.rs_buf) - KEYSZ - IVSZ;
-}
-
-static void rs_random_u32(uint32_t *val)
-{
-	unsigned char *keystream;
-	if(rs.rs_have < sizeof(*val))
-		rs_rekey(0, 0);
-	keystream = rsx.rs_buf + sizeof(rsx.rs_buf) - rs.rs_have;
-	memcpy(val, keystream, sizeof(*val));
-	memset(keystream, 0, sizeof(*val));
-	rs.rs_have -= sizeof(*val);
+	rsx.rs_have = sizeof(rsx.rs_buf) - KEYSZ - IVSZ;
 }
 
 static void rs_random_buf(void *buf_void, size_t n)
@@ -68,60 +78,42 @@ static void rs_random_buf(void *buf_void, size_t n)
 	size_t m;
 
 	while(n > 0) {
-		if(rs.rs_have > 0) {
-			m = n < rs.rs_have ? n : rs.rs_have;
-			keystream = rsx.rs_buf + sizeof(rsx.rs_buf) - rs.rs_have;
+		if(rsx.rs_have > 0) {
+			m = n < rsx.rs_have ? n : rsx.rs_have;
+			keystream = rsx.rs_buf + sizeof(rsx.rs_buf) - rsx.rs_have;
 			memcpy(buf, keystream, m);
 			memset(keystream, 0, m);
 			buf += m;
 			n -= m;
-			rs.rs_have -= m;
+			rsx.rs_have -= m;
 		}
-		if(rs.rs_have == 0)
-			rs_rekey(0, 0);
+		if(rsx.rs_have == 0)
+			rs_rekey();
 	}
-}
-
-static void do_init(void)
-{
-	unsigned char rnd[KEYSZ + IVSZ];
-
-	memset(&rsx, 0, sizeof(rsx));
-	memset(&rs, 0, sizeof(rs));
-	if(getentropy(rnd, sizeof rnd) == -1)
-		abort();
-	chacha_keysetup(&rsx.rs_chacha, rnd, KEYSZ * 8, 0);
-	chacha_ivsetup(&rsx.rs_chacha, rnd + KEYSZ);
-	rs.rs_have = 0;
-	memset(rsx.rs_buf, 0, sizeof(rsx.rs_buf));
 }
 
 static void init(void)
 {
-	do_init();
-	pthread_atfork((void(*)(void))0, (void(*)(void))0, do_init);
-}
+	unsigned char rnd[KEYSZ + IVSZ];
 
-static pthread_once_t setup_once = PTHREAD_ONCE_INIT;
-static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
+	memset(&rsx, 0, sizeof(rsx));
+	if(getentropy(rnd, sizeof rnd) == -1)
+		abort();
+	chacha_keysetup(&rsx.rs_chacha, rnd, KEYSZ * 8, 0);
+	chacha_ivsetup(&rsx.rs_chacha, rnd + KEYSZ);
+	rsx.rs_have = 0;
+	memset(rsx.rs_buf, 0, sizeof(rsx.rs_buf));
+}
+void posix_random_buffer(void *buf, size_t n)
+{
+	rs_random_buf(buf, n);
+}
 
 uint32_t posix_random(void)
 {
 	uint32_t val;
-
-	pthread_once(&setup_once, init);
-	pthread_mutex_lock(&mtx);
-	rs_random_u32(&val);
-	pthread_mutex_unlock(&mtx);
+	posix_random_buffer(&val, sizeof(val));
 	return val;
-}
-
-void posix_random_buffer(void *buf, size_t n)
-{
-	pthread_once(&setup_once, init);
-	pthread_mutex_lock(&mtx);
-	rs_random_buf(buf, n);
-	pthread_mutex_unlock(&mtx);
 }
 
 uint32_t posix_random_uniform(uint32_t up)
