@@ -170,13 +170,13 @@ uint32_t posix_random(void)
 
 uint32_t posix_random_uniform(uint32_t up)
 {
-	uint32_t tmp, max;
+	uint32_t tmp, min;
 
-	max = 0xFFFFFFFF - (0xFFFFFFFF % up);
-	
+	if(up < 2) return 0;
+	min = -up % up;
 	for(;;) {
 		tmp = posix_random();
-		if(tmp < max) break;
+		if(tmp >= min) break;
 	}
 	return tmp % up;
 }
