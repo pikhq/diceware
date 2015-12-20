@@ -76,7 +76,7 @@ static void chacha_keystream(struct chacha_ctx *ctx, uint8_t *c, size_t bytes)
 	int i;
 
 	if(!bytes)return;
-	for(; bytes > 0; c += 64, bytes = bytes >= 64 ? bytes - 64 : 0) {
+	for(;;) {
 		for(i = 0; i < 16; i++) x[i] = ctx->input[i];
 		for(i = 8; i > 0; i -= 2) {
 			QUARTERROUND(0, 4, 8, 12);
@@ -99,7 +99,13 @@ static void chacha_keystream(struct chacha_ctx *ctx, uint8_t *c, size_t bytes)
 		if(!ctx->input[12]) {
 			ctx->input[13]++;
 		}
-		for(i = 0; i < bytes && i < 64; i++) c[i] = output[i];
+		if(bytes <= 64) {
+			for(i = 0; i < bytes; i++) c[i] = output[i];
+			return;
+		}
+		for(i = 0; i < 64; i++) c[i] = output[i];
+		bytes -= 64;
+		c += 64;
 	}
 }
 
