@@ -117,6 +117,7 @@ static void init(void)
 void posix_random_buffer(void *buf, size_t n)
 {
 	static int inited = 0;
+	static uint16_t refresh_count;
 	static unsigned char ks_buf[RSBUFSZ];
 	static uint32_t have;
 	size_t m;
@@ -138,6 +139,15 @@ void posix_random_buffer(void *buf, size_t n)
 		}
 		if(have == 0) {
 			chacha_keystream(&chacha, ks_buf, sizeof(ks_buf));
+			refresh_count++;
+			if(refresh_count == 1024) {
+				unsigned char rnd[KEYSZ + IVSZ];
+				int i;
+				if(getentropy(rnd, sizeof rnd) == -1) abort();
+				for(i = 0; i < KEYSZ + IVSZ; i++)
+					ks_buf[i] ^= rnd[i];
+				refresh_count = 0;
+			}
 			chacha_keysetup(&chacha, ks_buf);
 			memset(ks_buf, 0, KEYSZ + IVSZ);
 			have = sizeof(ks_buf) - KEYSZ - IVSZ;
