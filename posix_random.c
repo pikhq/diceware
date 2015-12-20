@@ -146,7 +146,7 @@ void posix_random_buffer(void *buf, size_t n)
 		if(have == 0) {
 			chacha_keystream(&chacha, ks_buf, sizeof(ks_buf));
 			refresh_count++;
-			if(refresh_count == 1024) {
+			if(refresh_count == (1600000/RSBUFSZ)) {
 				unsigned char rnd[KEYSZ + IVSZ];
 				int i;
 				if(getentropy(rnd, sizeof rnd) == -1) abort();
