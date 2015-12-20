@@ -114,15 +114,33 @@ static void init(void)
 	chacha_keysetup(&chacha, rnd);
 }
 
-void posix_random_buffer(void *buf, size_t n)
+void posix_random_buffer(void *buf_void, size_t n)
 {
 	static int inited = 0;
+	unsigned char *buf = buf_void;
+	static unsigned char rsbuf[RSBUFSZ];
+	static int i;
+
 	if(!inited) {
 		init();
 		inited = 1;
 	}
 
-	chacha_keystream(&chacha, buf, n);
+	while(n > 0) {
+		if(i + n < RSBUFSZ) {
+			memcpy(buf, rsbuf + i, n);
+			buf += n;
+			i += n;
+			n = 0;
+		} else {
+			memcpy(buf, rsbuf + i, RSBUFSZ - i);
+			chacha_keystream(&chacha, rsbuf, RSBUFSZ);
+			chacha_keysetup(&chacha, rsbuf);
+			buf += RSBUFSZ - i;
+			i = KEYSZ + IVSZ;;
+			n -= RSBUFSZ - i;
+		}
+	}
 }
 
 uint32_t posix_random(void)
