@@ -1,23 +1,3 @@
-/* Implementation of arc4random functions initially from OpenBSD.
- *
- * Copyright (c) 1996, David Mazieres <dm@uun.org>
- * Copyright (c) 2008, Damien Miller <djm@openbsd.org>
- * Copyright (c) 2013, Markus Friedl <markus@openbsd.org>
- * Copyright (c) 2014, Theo de Raadt <deraadt@openbsd.org>
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- */
-
 #include "features.h"
 #ifndef HAVE_POSIX_RANDOM
 #include <stdint.h>
@@ -43,13 +23,10 @@ uint32_t posix_random_uniform(uint32_t up)
 #include <stdlib.h>
 #include <string.h>
 
-/* Be advised: this cutdown implementation (copied from OpenBSD's) is neither
- * thread-safe nor does it handle regeneration of random numbers on fork. This
- * is not a detriment in this application but it might be in yours! Be careful.
+/* Be advised: this cutdown implementation is neither thread-safe nor does it
+ * handle regeneration of random numbers on fork. This is not a detriment in
+ * this application but it might be in yours! Be careful.
  */
-
-#define KEYSTREAM_ONLY
-#include "chacha_private.h"
 
 int getentropy(void*, size_t);
 
@@ -58,64 +35,132 @@ int getentropy(void*, size_t);
 #define BLOCKSZ 64
 #define RSBUFSZ (16*BLOCKSZ)
 
-static struct rsx {
-	chacha_ctx rs_chacha;
-	unsigned char rs_buf[RSBUFSZ];
-	size_t rs_have;
-} rsx;
+struct chacha_ctx {
+	uint32_t input[16];
+};
 
-static void rs_rekey(void)
+#define ROTATE(v, c) ((uint32_t)((v) << (c)) | ((uint32_t)(v) >> (32 - (c))))
+#define QUARTERROUND(a,b,c,d) \
+	x[a] = x[a] + x[b]; x[d] = ROTATE(x[d]^x[a], 16); \
+	x[c] = x[c] + x[d]; x[b] = ROTATE(x[b]^x[c], 12); \
+	x[a] = x[a] + x[b]; x[d] = ROTATE(x[d]^x[a], 8); \
+	x[c] = x[c] + x[d]; x[b] = ROTATE(x[b]^x[c], 7);
+
+static void chacha_wordtobyte(uint8_t out[64], const uint32_t in[16])
 {
-	memset(rsx.rs_buf, 0, sizeof(rsx.rs_buf));
-	chacha_encrypt_bytes(&rsx.rs_chacha, rsx.rs_buf, rsx.rs_buf, sizeof(rsx.rs_buf));
-	chacha_keysetup(&rsx.rs_chacha, rsx.rs_buf, KEYSZ * 8, 0);
-	chacha_ivsetup(&rsx.rs_chacha, rsx.rs_buf + KEYSZ);
-	memset(rsx.rs_buf, 0, KEYSZ + IVSZ);
-	rsx.rs_have = sizeof(rsx.rs_buf) - KEYSZ - IVSZ;
-}
-
-static void rs_random_buf(void *buf_void, size_t n)
-{
-	unsigned char *buf = buf_void;
-	unsigned char *keystream;
-	size_t m;
-
-	while(n > 0) {
-		if(rsx.rs_have > 0) {
-			m = n < rsx.rs_have ? n : rsx.rs_have;
-			keystream = rsx.rs_buf + sizeof(rsx.rs_buf) - rsx.rs_have;
-			memcpy(buf, keystream, m);
-			memset(keystream, 0, m);
-			buf += m;
-			n -= m;
-			rsx.rs_have -= m;
-		}
-		if(rsx.rs_have == 0)
-			rs_rekey();
+	uint32_t x[16];
+	int i;
+	for(i = 0; i < 16; i++) x[i] = in[i];
+	for(i = 8; i > 0; i -= 2) {
+		QUARTERROUND(0, 4, 8, 12);
+		QUARTERROUND(1, 5, 9, 13);
+		QUARTERROUND(2, 6, 10, 14);
+		QUARTERROUND(3, 7, 11, 15);
+		QUARTERROUND(0, 5, 10, 15);
+		QUARTERROUND(1, 6, 11, 12);
+		QUARTERROUND(2, 7, 8, 13);
+		QUARTERROUND(3, 4, 9, 14);
+	}
+	for(i = 0; i < 16; i++) x[i] = x[i] + in[i];
+	for(i = 0; i < 16; i++) {
+		out[4*i+0] = x[i];
+		out[4*i+1] = x[i] >> 8;
+		out[4*i+2] = x[i] >> 16;
+		out[4*i+3] = x[i] >> 24;
 	}
 }
+
+static void chacha_keysetup(struct chacha_ctx *x, const uint8_t *k, uint32_t kbits, uint32_t ivbits)
+{
+	const uint8_t *constants;
+	static const uint8_t sigma[16] = "expand 32-byte k";
+	static const uint8_t tau[16] = "expand 16-byte k";
+
+	x->input[4] = k[0] | k[1] << 8 | k[2] << 16 | k[3] << 24;
+	x->input[5] = k[4] | k[5] << 8 | k[6] << 16 | k[7] << 24;
+	x->input[6] = k[8] | k[9] << 8 | k[10] << 16 | k[11] << 24;
+	x->input[7] = k[12] | k[13] << 8 | k[14] << 16 | k[15] << 24;
+	if(kbits == 256) {
+		k += 16;
+		constants = sigma;
+	} else {
+		constants = tau;
+	}
+	x->input[8] = k[0] | k[1] << 8 | k[2] << 16 | k[3] << 24;
+	x->input[9] = k[4] | k[5] << 8 | k[6] << 16 | k[7] << 24;
+	x->input[10] = k[8] | k[9] << 8 | k[10] << 16 | k[11] << 24;
+	x->input[11] = k[12] | k[13] << 8 | k[14] << 16 | k[15] << 24;
+	x->input[0] = constants[0] | constants[1] << 8 | constants[2] << 16 | constants[3] << 24;
+	x->input[1] = constants[4] | constants[5] << 8 | constants[6] << 16 | constants[7] << 24;
+	x->input[2] = constants[8] | constants[9] << 8 | constants[10] << 16 | constants[11] << 24;
+	x->input[3] = constants[12] | constants[13] << 8 | constants[14] << 16 | constants[15] << 24;
+}
+
+static void chacha_ivsetup(struct chacha_ctx *x, const uint8_t *iv)
+{
+	x->input[12] = 0;
+	x->input[13] = 0;
+	x->input[14] = iv[0] | iv[1] << 8 | iv[2] << 16 | iv[3] << 24;
+	x->input[15] = iv[4] | iv[5] << 8 | iv[6] << 16 | iv[7] << 24;
+}
+
+static void chacha_encrypt_bytes(struct chacha_ctx *x, const uint8_t *m, uint8_t *c, uint32_t bytes)
+{
+	uint8_t output[64];
+	int i;
+
+	if(!bytes)return;
+	for(; bytes > 0; c += 64, m += 64, bytes = bytes >= 64 ? bytes - 64 : 0) {
+		chacha_wordtobyte(output, x->input);
+		x->input[12]++;
+		if(!x->input[12]) {
+			x->input[13]++;
+		}
+		for(i = 0; i < bytes && i < 64; i++) c[i] = m[i] ^ output[i];
+	}
+}
+
+static struct chacha_ctx chacha;
+static uint8_t keystream[RSBUFSZ];
+static size_t have; 
 
 static void init(void)
 {
 	unsigned char rnd[KEYSZ + IVSZ];
 
-	memset(&rsx, 0, sizeof(rsx));
 	if(getentropy(rnd, sizeof rnd) == -1)
 		abort();
-	chacha_keysetup(&rsx.rs_chacha, rnd, KEYSZ * 8, 0);
-	chacha_ivsetup(&rsx.rs_chacha, rnd + KEYSZ);
-	rsx.rs_have = 0;
-	memset(rsx.rs_buf, 0, sizeof(rsx.rs_buf));
+	chacha_keysetup(&chacha, rnd, KEYSZ * 8, 0);
+	chacha_ivsetup(&chacha, rnd + KEYSZ);
+	have = 0;
+	memset(keystream, 0, sizeof(keystream));
 }
 
-void posix_random_buffer(void *buf, size_t n)
+void posix_random_buffer(void *buf_void, size_t n)
 {
 	static int inited = 0;
 	if(!inited) {
 		init();
 		inited = 1;
 	}
-	rs_random_buf(buf, n);
+	unsigned char *buf = buf_void;
+	size_t m;
+
+	while(n > 0) {
+		if(have > 0) {
+			m = n < have ? n : have;
+			memcpy(buf, keystream + sizeof(keystream) - have, m);
+			memset(keystream + sizeof(keystream) - have, 0, m);
+			buf += m;
+			n -= m;
+			have -= m;
+		}
+		if(have == 0) {
+			memset(keystream, 0, sizeof(keystream));
+			chacha_encrypt_bytes(&chacha, keystream, keystream, sizeof(keystream));
+			have = sizeof(keystream);
+		}
+	}
 }
 
 uint32_t posix_random(void)
