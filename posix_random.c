@@ -117,12 +117,32 @@ static void init(void)
 void posix_random_buffer(void *buf, size_t n)
 {
 	static int inited = 0;
+	static unsigned char ks_buf[RSBUFSZ];
+	static uint32_t have;
+	size_t m;
 	if(!inited) {
 		init();
 		inited = 1;
 	}
 
-	chacha_keystream(&chacha, buf, n);
+	while(n > 0) {
+		if(have > 0) {
+			unsigned char *keystream;
+			m = n < have ? n : have;
+			keystream = ks_buf + sizeof(ks_buf) - have;
+			memcpy(buf, keystream, m);
+			memset(keystream, 0, m);
+			buf += m;
+			n -= m;
+			have -= m;
+		}
+		if(have == 0) {
+			chacha_keystream(&chacha, ks_buf, sizeof(ks_buf));
+			chacha_keysetup(&chacha, ks_buf);
+			memset(ks_buf, 0, KEYSZ + IVSZ);
+			have = sizeof(ks_buf) - KEYSZ - IVSZ;
+		}
+	}
 }
 
 uint32_t posix_random(void)
