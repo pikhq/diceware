@@ -104,8 +104,14 @@ static void init(void)
 	rsx.rs_have = 0;
 	memset(rsx.rs_buf, 0, sizeof(rsx.rs_buf));
 }
+
 void posix_random_buffer(void *buf, size_t n)
 {
+	static int inited = 0;
+	if(!inited) {
+		init();
+		inited = 1;
+	}
 	rs_random_buf(buf, n);
 }
 
