@@ -46,75 +46,58 @@ struct chacha_ctx {
 	x[a] = x[a] + x[b]; x[d] = ROTATE(x[d]^x[a], 8); \
 	x[c] = x[c] + x[d]; x[b] = ROTATE(x[b]^x[c], 7);
 
-static void chacha_wordtobyte(uint8_t out[64], const uint32_t in[16])
+static void chacha_keysetup(struct chacha_ctx *x, const uint8_t *k)
 {
-	uint32_t x[16];
-	int i;
-	for(i = 0; i < 16; i++) x[i] = in[i];
-	for(i = 8; i > 0; i -= 2) {
-		QUARTERROUND(0, 4, 8, 12);
-		QUARTERROUND(1, 5, 9, 13);
-		QUARTERROUND(2, 6, 10, 14);
-		QUARTERROUND(3, 7, 11, 15);
-		QUARTERROUND(0, 5, 10, 15);
-		QUARTERROUND(1, 6, 11, 12);
-		QUARTERROUND(2, 7, 8, 13);
-		QUARTERROUND(3, 4, 9, 14);
-	}
-	for(i = 0; i < 16; i++) x[i] = x[i] + in[i];
-	for(i = 0; i < 16; i++) {
-		out[4*i+0] = x[i];
-		out[4*i+1] = x[i] >> 8;
-		out[4*i+2] = x[i] >> 16;
-		out[4*i+3] = x[i] >> 24;
-	}
-}
-
-static void chacha_keysetup(struct chacha_ctx *x, const uint8_t *k, uint32_t kbits, uint32_t ivbits)
-{
-	const uint8_t *constants;
+	const uint8_t *iv = k + KEYSZ;
 	static const uint8_t sigma[16] = "expand 32-byte k";
-	static const uint8_t tau[16] = "expand 16-byte k";
 
 	x->input[4] = k[0] | k[1] << 8 | k[2] << 16 | k[3] << 24;
 	x->input[5] = k[4] | k[5] << 8 | k[6] << 16 | k[7] << 24;
 	x->input[6] = k[8] | k[9] << 8 | k[10] << 16 | k[11] << 24;
 	x->input[7] = k[12] | k[13] << 8 | k[14] << 16 | k[15] << 24;
-	if(kbits == 256) {
-		k += 16;
-		constants = sigma;
-	} else {
-		constants = tau;
-	}
-	x->input[8] = k[0] | k[1] << 8 | k[2] << 16 | k[3] << 24;
-	x->input[9] = k[4] | k[5] << 8 | k[6] << 16 | k[7] << 24;
-	x->input[10] = k[8] | k[9] << 8 | k[10] << 16 | k[11] << 24;
-	x->input[11] = k[12] | k[13] << 8 | k[14] << 16 | k[15] << 24;
-	x->input[0] = constants[0] | constants[1] << 8 | constants[2] << 16 | constants[3] << 24;
-	x->input[1] = constants[4] | constants[5] << 8 | constants[6] << 16 | constants[7] << 24;
-	x->input[2] = constants[8] | constants[9] << 8 | constants[10] << 16 | constants[11] << 24;
-	x->input[3] = constants[12] | constants[13] << 8 | constants[14] << 16 | constants[15] << 24;
-}
-
-static void chacha_ivsetup(struct chacha_ctx *x, const uint8_t *iv)
-{
+	x->input[8] = k[16] | k[17] << 8 | k[18] << 16 | k[19] << 24;
+	x->input[9] = k[20] | k[21] << 8 | k[22] << 16 | k[23] << 24;
+	x->input[10] = k[24] | k[25] << 8 | k[26] << 16 | k[27] << 24;
+	x->input[11] = k[28] | k[29] << 8 | k[30] << 16 | k[31] << 24;
+	x->input[0] = sigma[0] | sigma[1] << 8 | sigma[2] << 16 | sigma[3] << 24;
+	x->input[1] = sigma[4] | sigma[5] << 8 | sigma[6] << 16 | sigma[7] << 24;
+	x->input[2] = sigma[8] | sigma[9] << 8 | sigma[10] << 16 | sigma[11] << 24;
+	x->input[3] = sigma[12] | sigma[13] << 8 | sigma[14] << 16 | sigma[15] << 24;
 	x->input[12] = 0;
 	x->input[13] = 0;
 	x->input[14] = iv[0] | iv[1] << 8 | iv[2] << 16 | iv[3] << 24;
 	x->input[15] = iv[4] | iv[5] << 8 | iv[6] << 16 | iv[7] << 24;
 }
 
-static void chacha_encrypt_bytes(struct chacha_ctx *x, const uint8_t *m, uint8_t *c, uint32_t bytes)
+static void chacha_encrypt_bytes(struct chacha_ctx *ctx, const uint8_t *m, uint8_t *c, uint32_t bytes)
 {
 	uint8_t output[64];
+	uint32_t x[16];
 	int i;
 
 	if(!bytes)return;
 	for(; bytes > 0; c += 64, m += 64, bytes = bytes >= 64 ? bytes - 64 : 0) {
-		chacha_wordtobyte(output, x->input);
-		x->input[12]++;
-		if(!x->input[12]) {
-			x->input[13]++;
+		for(i = 0; i < 16; i++) x[i] = ctx->input[i];
+		for(i = 8; i > 0; i -= 2) {
+			QUARTERROUND(0, 4, 8, 12);
+			QUARTERROUND(1, 5, 9, 13);
+			QUARTERROUND(2, 6, 10, 14);
+			QUARTERROUND(3, 7, 11, 15);
+			QUARTERROUND(0, 5, 10, 15);
+			QUARTERROUND(1, 6, 11, 12);
+			QUARTERROUND(2, 7, 8, 13);
+			QUARTERROUND(3, 4, 9, 14);
+		}
+		for(i = 0; i < 16; i++) x[i] = x[i] + ctx->input[i];
+		for(i = 0; i < 16; i++) {
+			output[4*i+0] = x[i];
+			output[4*i+1] = x[i] >> 8;
+			output[4*i+2] = x[i] >> 16;
+			output[4*i+3] = x[i] >> 24;
+		}
+		ctx->input[12]++;
+		if(!ctx->input[12]) {
+			ctx->input[13]++;
 		}
 		for(i = 0; i < bytes && i < 64; i++) c[i] = m[i] ^ output[i];
 	}
@@ -130,8 +113,7 @@ static void init(void)
 
 	if(getentropy(rnd, sizeof rnd) == -1)
 		abort();
-	chacha_keysetup(&chacha, rnd, KEYSZ * 8, 0);
-	chacha_ivsetup(&chacha, rnd + KEYSZ);
+	chacha_keysetup(&chacha, rnd);
 	have = 0;
 	memset(keystream, 0, sizeof(keystream));
 }
