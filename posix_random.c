@@ -149,9 +149,10 @@ void posix_random_buffer(void *buf, size_t n)
 			if(refresh_count == (1600000/RSBUFSZ)) {
 				unsigned char rnd[KEYSZ + IVSZ];
 				int i;
-				if(getentropy(rnd, sizeof rnd) == -1) abort();
-				for(i = 0; i < KEYSZ + IVSZ; i++)
-					ks_buf[i] ^= rnd[i];
+				if(getentropy(rnd, sizeof rnd) != -1) {
+					for(i = 0; i < KEYSZ + IVSZ; i++)
+						ks_buf[i] ^= rnd[i];
+				}
 				refresh_count = 0;
 			}
 			chacha_keysetup(&chacha, ks_buf);

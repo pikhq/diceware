@@ -187,7 +187,8 @@ int getentropy(void *buf, size_t len)
 	if(ret != -1) return ret;
 	ret = getentropy_sysctl(buf, len);
 	if(ret != -1) return ret;
-	abort();
+	errno = EIO;
+	return -1;
 }
 
 #endif
