@@ -22,6 +22,7 @@ uint32_t posix_random_uniform(uint32_t up)
 #else
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 
 /* Be advised: this cutdown implementation is neither thread-safe nor does it
  * handle regeneration of random numbers on fork. This is not a detriment in
@@ -116,7 +117,7 @@ static void init(void)
 	unsigned char rnd[KEYSZ + IVSZ];
 
 	if(getentropy(rnd, sizeof rnd) == -1)
-		abort();
+		raise(SIGKILL);
 	chacha_keysetup(&chacha, rnd);
 }
 
