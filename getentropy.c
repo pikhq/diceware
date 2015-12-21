@@ -142,7 +142,7 @@ static int getentropy_sysctl(void *buf, size_t len)
 		struct __sysctl_args args = {
 			.name = mib,
 			.nlen = 3,
-			.oldval = (char*)buf + i,
+			.oldval = uuid_buf
 			.oldlenp = (size_t[]){16}
 		};
 		if(syscall(SYS__sysctl, &args) != 0) {
