@@ -40,62 +40,69 @@ struct chacha_ctx {
 	uint32_t input[16];
 };
 
-#define ROTATE(v, c) ((uint32_t)((v) << (c)) | ((uint32_t)(v) >> (32 - (c))))
-#define QUARTERROUND(a,b,c,d) \
-	x[a] = x[a] + x[b]; x[d] = ROTATE(x[d]^x[a], 16); \
-	x[c] = x[c] + x[d]; x[b] = ROTATE(x[b]^x[c], 12); \
-	x[a] = x[a] + x[b]; x[d] = ROTATE(x[d]^x[a], 8); \
-	x[c] = x[c] + x[d]; x[b] = ROTATE(x[b]^x[c], 7);
+static uint32_t rotate(uint32_t x, uint32_t y)
+{
+	return (x << y) | (x >> (32 - y));
+}
+
+static void quarterround(uint32_t x[16], int a, int b, int c, int d)
+{
+	x[a] += x[b];
+	x[d] = rotate(x[d]^x[a], 16);
+	x[c] += x[d];
+	x[b] = rotate(x[b]^x[c], 12);
+	x[a] += x[b];
+	x[d] = rotate(x[d]^x[a], 8);
+	x[c] += x[d];
+	x[b] = rotate(x[b]^x[c], 7);
+}
+
+static uint32_t get_uint32(const uint8_t x[4])
+{
+	return x[0] | x[1] << 8 | x[2] << 16 | x[3] << 24;
+}
+
+static void write_uint32(uint32_t x, uint8_t y[4])
+{
+	y[0] = x;
+	y[1] = x >> 8;
+	y[2] = x >> 16;
+	y[3] = x >> 24;
+}
 
 static void chacha_keysetup(struct chacha_ctx *x, const uint8_t *k)
 {
 	const uint8_t *iv = k + KEYSZ;
 	static const uint8_t sigma[16] = "expand 32-byte k";
+	int i;
 
-	x->input[4] = k[0] | k[1] << 8 | k[2] << 16 | k[3] << 24;
-	x->input[5] = k[4] | k[5] << 8 | k[6] << 16 | k[7] << 24;
-	x->input[6] = k[8] | k[9] << 8 | k[10] << 16 | k[11] << 24;
-	x->input[7] = k[12] | k[13] << 8 | k[14] << 16 | k[15] << 24;
-	x->input[8] = k[16] | k[17] << 8 | k[18] << 16 | k[19] << 24;
-	x->input[9] = k[20] | k[21] << 8 | k[22] << 16 | k[23] << 24;
-	x->input[10] = k[24] | k[25] << 8 | k[26] << 16 | k[27] << 24;
-	x->input[11] = k[28] | k[29] << 8 | k[30] << 16 | k[31] << 24;
-	x->input[0] = sigma[0] | sigma[1] << 8 | sigma[2] << 16 | sigma[3] << 24;
-	x->input[1] = sigma[4] | sigma[5] << 8 | sigma[6] << 16 | sigma[7] << 24;
-	x->input[2] = sigma[8] | sigma[9] << 8 | sigma[10] << 16 | sigma[11] << 24;
-	x->input[3] = sigma[12] | sigma[13] << 8 | sigma[14] << 16 | sigma[15] << 24;
-	x->input[12] = 0;
-	x->input[13] = 0;
-	x->input[14] = iv[0] | iv[1] << 8 | iv[2] << 16 | iv[3] << 24;
-	x->input[15] = iv[4] | iv[5] << 8 | iv[6] << 16 | iv[7] << 24;
+	for(i = 0; i < 4; i++)
+		x->input[i] = get_uint32(&sigma[i*4]);
+	for(i = 0; i < 8; i++)
+		x->input[i+4] = get_uint32(&k[i*4]);
+	for(i = 0; i < 2; i++)
+		x->input[i+12] = 0;
+	for(i = 0; i < 2; i++)
+		x->input[i+14] = get_uint32(&iv[i*4]);
 }
 
 static void chacha_keystream(struct chacha_ctx *ctx, uint8_t *c, size_t bytes)
 {
 	uint8_t output[64];
 	uint32_t x[16];
-	int i;
+	int i, j;
 
 	if(!bytes)return;
 	for(;;) {
 		for(i = 0; i < 16; i++) x[i] = ctx->input[i];
 		for(i = 8; i > 0; i -= 2) {
-			QUARTERROUND(0, 4, 8, 12);
-			QUARTERROUND(1, 5, 9, 13);
-			QUARTERROUND(2, 6, 10, 14);
-			QUARTERROUND(3, 7, 11, 15);
-			QUARTERROUND(0, 5, 10, 15);
-			QUARTERROUND(1, 6, 11, 12);
-			QUARTERROUND(2, 7, 8, 13);
-			QUARTERROUND(3, 4, 9, 14);
+			for(j = 0; j < 4; j++)
+				quarterround(x, j, j+4, j+8, j+12);
+			for(j = 0; j < 4; j++)
+				quarterround(x, j, ((j+1)%4)+4, ((j+2)%4)+8, ((j+3)%4)+12);
 		}
 		for(i = 0; i < 16; i++) x[i] = x[i] + ctx->input[i];
-		for(i = 0; i < 16; i++) {
-			output[4*i+0] = x[i];
-			output[4*i+1] = x[i] >> 8;
-			output[4*i+2] = x[i] >> 16;
-			output[4*i+3] = x[i] >> 24;
-		}
+		for(i = 0; i < 16; i++) write_uint32(x[i], &output[4*i]);
 		ctx->input[12]++;
 		if(!ctx->input[12]) {
 			ctx->input[13]++;
