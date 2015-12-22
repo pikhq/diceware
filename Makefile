@@ -19,4 +19,4 @@ features.h: has_feature.sh $(wildcard features/*.features)
 	./has_feature.sh >features.h
 
 clean:
-	-rm -f $(OBJS) features.h diceware
+	-rm -f $(OBJS) features.h diceware .test
