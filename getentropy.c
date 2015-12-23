@@ -38,6 +38,8 @@
 #include <wincrypt.h>
 #endif
 
+int getentropy_rdrand(void *buf, size_t len);
+
 static int getentropy_win32crypt(void *buf, size_t len)
 {
 #ifdef HAVE_WIN32_CRYPT
@@ -195,6 +197,8 @@ int getentropy(void *buf, size_t len)
 	ret = getentropy_win32crypt(buf, len);
 	if(ret != -1) return ret;
 	ret = getentropy_urandom(buf, len);
+	if(ret != -1) return ret;
+	ret = getentropy_rdrand(buf, len);
 	if(ret != -1) return ret;
 	ret = getentropy_sysctl(buf, len);
 	if(ret != -1) return ret;
