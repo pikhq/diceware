@@ -15,7 +15,7 @@ diceware: $(OBJS)
 
 $(OBJS): $(wildcard *.h) features.h
 
-features.h: has_feature.sh $(wildcard features/*.features)
+features.h: has_feature.sh features/ $(wildcard features/*.feature)
 	./has_feature.sh >features.h
 
 clean:
