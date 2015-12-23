@@ -22,31 +22,42 @@ int main(int argc, char **argv)
 	int len;
 	char **v;
 
-	int add_special = 0;
-	int add_digit = 0;
-	int use_digits = 0;
-	int use_alphanum = 0;
-	int use_rand = 0;
+	const char *list = 0;
 
-	while((opt = getopt(argc, argv, "DARds")) > 0) {
+	int use_rand = 0;
+	int add_rand = 0;
+
+	while((opt = getopt(argc, argv, "DARdsl:L:")) > 0) {
 		switch(opt) {
 		case 'D':
-			use_digits = 1;
-			use_rand = use_alphanum = 0;
+			list = "0123456789";
+			use_rand = 1;
 			break;
 		case 'd':
-			add_digit = 1;
+			list = "0123456789";
+			add_rand = 1;
 			break;
 		case 's':
-			add_special = 1;
+			list = 
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-=+[]{}\\|`;:'\"<>/?.,~_";
+			add_rand = 1;
 			break;
 		case 'A':
-			use_alphanum = 1;
-			use_rand = use_digits = 0;
+			list = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+			use_rand = 1;
 			break;
 		case 'R':
+			list = 
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-=+[]{}\\|`;:'\"<>/?.,~_";
 			use_rand = 1;
-			use_alphanum = use_digits = 0;
+			break;
+		case 'l':
+			list = optarg;
+			add_rand = 1;
+			break;
+		case 'L':
+			list = optarg;
+			use_rand = 1;
 			break;
 		default:
 			return 1;
@@ -64,26 +75,9 @@ int main(int argc, char **argv)
 	num = atoi(*v);
 	if(num <= 0) return 0;
 
-	if(use_digits) {
-		for(i = 0; i < num; i++) {
-			printf("%d", posix_random_uniform(10));
-		}
-		printf("\n");
-		return 0;
-	} else if(use_alphanum) {
-		static const char *alphanum =
-			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-		for(i = 0; i < num; i++) {
-			printf("%c", alphanum[posix_random_uniform(strlen(alphanum))]);
-		}
-		printf("\n");
-		return 0;
-	} else if(use_rand) {
-		static const char *rand_str =
-			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-=+[]{}\\|`;:'\"<>/?.,~_";
-		for(i = 0; i < num; i++) {
-			printf("%c", rand_str[posix_random_uniform(strlen(rand_str))]);
-		}
+	if(use_rand) {
+		for(i = 0; i < num; i++)
+			printf("%c", list[posix_random_uniform(strlen(list))]);
 		printf("\n");
 		return 0;
 	}
@@ -100,27 +94,12 @@ retry:
 		if(!strs[i]) abort();
 	}
 
-	if(add_digit) {
+	if(add_rand) {
 		int roll1, roll2, roll3;
-		for(;;) {
-			roll1 = posix_random_uniform(num);
-			roll2 = posix_random_uniform(strlen(strs[roll1]));
-
-			if(!isdigit(strs[roll1][roll2])) break;
-		}
-		strs[roll1][roll2] = '0' + posix_random_uniform(10);
-	}
-
-	if(add_special) {
-		int roll1, roll2, roll3;
-		static const char *specials = "!@#$%^&*()-=+[]{}\\|`;:'\"<>/?.,~_";
-		for(;;) {
-			roll1 = posix_random_uniform(num);
-			roll2 = posix_random_uniform(strlen(strs[roll1]));
-
-			if(!strchr(specials, strs[roll1][roll2])) break;
-		}
-		strs[roll1][roll2] = specials[posix_random_uniform(strlen(specials))];
+		roll1 = posix_random_uniform(num);
+		roll2 = posix_random_uniform(strlen(strs[roll1]));
+		roll3 = posix_random_uniform(strlen(list));
+		strs[roll1][roll2] = list[roll3];
 	}
 
 	for(i = 0; i < num; i++) {
