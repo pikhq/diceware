@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <ctype.h>
 
+#include "getopt.h"
 #include "posix_random.h"
 
 static const char* get_word(int n) {

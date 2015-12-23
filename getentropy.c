@@ -1,14 +1,21 @@
 #include <errno.h>
-#include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+#ifdef _POSIX_ARG_MAX
 #include <unistd.h>
-#include <sys/stat.h>
+#endif
 
 #include "features.h"
 
 #ifndef HAVE_GETENTROPY
+
+#ifdef _POSIX_VERSION
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#endif
 
 #if defined(HAVE_GETRANDOM_SYSCALL) || defined(HAVE_SYSCTL_RANDOM)
 #include <sys/syscall.h>
@@ -83,6 +90,7 @@ static int gotdata(void *buf, size_t len)
 
 static int getentropy_urandom(void *buf, size_t len)
 {
+#ifdef _POSIX_VERSION
 	int fd, cnt;
 	struct stat st;
 	size_t i;
@@ -128,6 +136,9 @@ start:
 	if(gotdata(buf, len) == 0)
 		return 0;
 	errno = EIO;
+	return -1;
+#endif
+	errno = ENOSYS;
 	return -1;
 }
 
