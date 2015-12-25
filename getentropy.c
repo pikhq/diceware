@@ -21,12 +21,9 @@
 #include <sys/syscall.h>
 #endif
 
-#if defined(HAVE_GETRANDOM_SYSCALL) || defined(HAVE_LINUX_RANDOM_IOCTL)
-#include <linux/random.h>
-#endif
-
 #ifdef HAVE_LINUX_RANDOM_IOCTL
 #include <sys/ioctl.h>
+#include <linux/random.h>
 #endif
 
 #ifdef HAVE_SYSCTL_RANDOM

@@ -1,6 +1,8 @@
 #include <unistd.h>
 #include <sys/syscall.h>
-#include <linux/random.h>
+
+#define GRND_NONBLOCK 0x01
+#define GRND_RANDOM 0x02
 
 int main(void)
 {
