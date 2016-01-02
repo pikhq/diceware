@@ -54,7 +54,7 @@ int getentropy_rdrand(void *buf, size_t len)
 	}
 #ifdef HAVE_RDRAND
 	while(len) {
-		m = len > 4 ? sizeof(r) : m;
+		m = len > 4 ? sizeof(r) : len;
 		err = 0;
 		for(i = 0; i < 10 && !err; i++) {
 			__asm__("rdrand %0\n\t"
