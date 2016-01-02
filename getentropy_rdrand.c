@@ -4,6 +4,8 @@
 
 #include "features.h"
 
+#if !defined(HAVE_GETENTROPY) && !defined(HAVE_POSIX_RANDOM) && !defined(HAVE_ARC4RANDOM)
+
 static int have_rdrand(void)
 {
 #ifdef HAVE_RDRAND
@@ -74,3 +76,5 @@ int getentropy_rdrand(void *buf, size_t len)
 	errno = ENOSYS;
 	return -1;
 }
+
+#endif

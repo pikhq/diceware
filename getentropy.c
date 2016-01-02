@@ -9,7 +9,7 @@
 
 #include "features.h"
 
-#ifndef HAVE_GETENTROPY
+#if !defined(HAVE_GETENTROPY) && !defined(HAVE_POSIX_RANDOM) && !defined(HAVE_ARC4RANDOM)
 
 #ifdef _POSIX_VERSION
 #include <fcntl.h>
