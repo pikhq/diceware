@@ -95,7 +95,7 @@ static void chacha_keystream(struct chacha_ctx *ctx, uint8_t *c, size_t bytes)
 	if(!bytes)return;
 	for(;;) {
 		for(i = 0; i < 16; i++) x[i] = ctx->input[i];
-		for(i = 8; i > 0; i -= 2) {
+		for(i = 20; i > 0; i -= 2) {
 			for(j = 0; j < 4; j++)
 				quarterround(x, j, j+4, j+8, j+12);
 			for(j = 0; j < 4; j++)
