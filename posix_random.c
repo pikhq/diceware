@@ -124,7 +124,11 @@ static void init(void)
 	unsigned char rnd[KEYSZ + IVSZ];
 
 	if(getentropy(rnd, sizeof rnd) == -1)
+#ifdef SIGKILL
 		raise(SIGKILL);
+#else
+		abort();
+#endif
 	chacha_keysetup(&chacha, rnd);
 }
 
