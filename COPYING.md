@@ -25,8 +25,8 @@ originates from [Daniel Bernstein's implementation][djb].
 
 [djb]: http://cr.yp.to/streamciphers/timings/estreambench/submissions/salsa20/chacha8/ref/chacha.c
 
-> chacha-ref.c version 20080118
-> D. J. Bernstein
+> chacha-ref.c version 20080118  
+> D. J. Bernstein  
 > Public domain.
 
 getopt.c copyright
