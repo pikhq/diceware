@@ -4,7 +4,7 @@ COPYING
 Main copyright
 --------------
 
-> Copyright © 2015 by Josiah Worcester <josiahw@gmail.com>
+> Copyright © 2015 by Ada Worcester <oss@ada.pikhq.com>
 >
 > Permission to use, copy, modify, and/or distribute this software for any
 > purpose with or without fee is hereby granted.
